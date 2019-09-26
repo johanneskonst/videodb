@@ -1,4 +1,6 @@
 # Files to be ignored by git
-config.inc.php
 
+config.inc.php
 cache
+.ionide
+_old_cvs
