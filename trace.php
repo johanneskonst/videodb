@@ -36,13 +36,12 @@ function get_base($url)
 
 	// remove filename from path if recognized file type
 	$uri['path'] = preg_replace("/^(.*\/)(.*)$/i", '\\1', $uri['path']);
-    
 	// append trailing / if missing
 	if (!preg_match("/\/$/", $uri['path'])) $uri['path'] .= '/';
 }
 
 /**
- * Figures out fully qualified, absolute URI for given (relative) URI,  
+ * Figures out fully qualified, absolute URI for given (relative) URI
  * using global $base_server and $base_path variables
  *
  * @param  string  $url (relative) URI
@@ -113,10 +112,8 @@ function is_known_item($id, &$sp_id, &$sp_diskid)
         $sp_id      = $result[0]['id'];
         $sp_diskid  = $result[0]['diskid'];
         if (!$sp_diskid) $sp_diskid = 'no_diskid';
-        
         return true;
     }
-    
     return false;
 }
 
@@ -142,12 +139,12 @@ function _replace_enclosed_tag_traced($matches)
 
     // what's our host?
     $engine = (preg_match('/(imdb|amazon|filmweb)/i', $uri['host'], $m)) ? $m[1] : '';
-    
+
     if ($engine == 'imdb')
     {
         // imdb
         // fix for IMDB speciality: 2nd href inside first one
-        if (preg_match("/http.*?http/i", $url)) 
+        if (preg_match("/http.*?http/i", $url))
         {
             return implode('', array_slice($matches,1));
         }
@@ -173,9 +170,9 @@ function _replace_enclosed_tag_traced($matches)
         }
         // amend url for seasons/year the path for previous and next season/year url's at bottom of eposides page
         if (preg_match("#(=(.*?)\&ref_=ttep_ep_sn_(pv|nx))|(=(.*?)\&ref_=ttep_ep_yr_(pv|nx))#",$matches[2],$mymatches))
-        {    
+        {
 //          echo "<BR> in matches"; var_dump($matches);
-//          echo "mymatches 1"; var_dump($mymatches);     
+//          echo "mymatches 1"; var_dump($mymatches);
 //          echo '<BR> $url - '.$url;
             if (!preg_match('#(\/episodes\/\?season=)|(\/episodes\/\?year=)#',$url,$mymatches))
             {
@@ -185,7 +182,7 @@ function _replace_enclosed_tag_traced($matches)
                 $url = preg_replace($patterns,$replacements,$url);
 //              echo '<BR> $url after - '.$url;
             }
-                // remove _ajax in url will be added by js. 
+                // remove _ajax in url will be added by js.
            if (preg_match('#\/episodes\/_ajax\/#',$url,$mymatches))
             {
 //              echo "<BR> mymatches 3"; var_dump($mymatches);
@@ -198,7 +195,7 @@ function _replace_enclosed_tag_traced($matches)
     elseif ($engine == 'amazon')
 	{
 		// amazon
-		if (preg_match("#exec/obidos/tg/detail/-/([0-9A-Z]{10,})/#", $url, $m)) 
+		if (preg_match("#exec/obidos/tg/detail/-/([0-9A-Z]{10,})/#", $url, $m))
 		{
 			$id = $m[1];
 			$append .= ' <a href="edit.php?save=1&amp;lookup=2&amp;imdbID='.urlencode('amazon:'.$id).
@@ -208,7 +205,7 @@ function _replace_enclosed_tag_traced($matches)
     elseif ($engine == 'filmweb')
 	{
 		// filmweb.pl
-		if (preg_match("/[Ff]ilm[\?\.]id=(\d+)/i", $url, $m) && $title) 
+		if (preg_match("/[Ff]ilm[\?\.]id=(\d+)/i", $url, $m) && $title)
 		{
 			$append = " <a href=\"edit.php?save=1&amp;engine=filmweb&amp;lookup=1&amp;imdbID=".
 			          urlencode('filmweb:'.$m[1])."&amp;title="."\">".
@@ -225,7 +222,7 @@ function _replace_enclosed_tag_traced($matches)
 function _replace_tag($matches)
 {
 	global $urlid, $striptags, $iframe;
-	
+
 	$url = get_full_url($matches[4]);
 	if (in_array('ads', $striptags) && (strtolower($matches[2]) == 'img') && preg_match("/\/ads?\//i", $url)) return '';
 
@@ -256,7 +253,7 @@ function imdb_replace_title_callback($matches)
 
 	$result = $matches[1].$matches[2];
 
-	if (preg_match("#/title/tt(.+)/#", $uri['path'], $m)) 
+	if (preg_match("#/title/tt(.+)/#", $uri['path'], $m))
 	{
         $result .= ' <a href="edit.php?save=1&amp;lookup=2&amp;imdbID='.
                     urlencode("imdb:".$m[1]).'"><img src="'.img('add.gif').
@@ -280,7 +277,7 @@ function imdb_replace_title_callback($matches)
  * Converts HTML elements to allow proxying through trace.php
  * e.g. all href's are converted to trace.php?url=href links
  *
- * When a link of the IMDB movie title format is discovered, 
+ * When a link of the IMDB movie title format is discovered,
  * the "Add Disc" icon is appended, linking to edit.php with the correct disk id
  *
  * Note: this function is far from complete, more help is desired
@@ -304,13 +301,13 @@ function fixup_HTML($html)
 	// image, frame, script
 	$html = preg_replace_callback("/(<(ima?ge?|frame|iframe|script)\s+[^>]*?src\s*=\s*(\"|'))([^>]*?)(\\3.*?>)/is", '_replace_tag', $html);
 	$html = preg_replace_callback("/(<(ima?ge?|frame|iframe|script)\s+[^>]*?src\s*=\s*([^\"']))([\d\w\.\/\+\%-:=&_]+?)(\s*[^>]*?>)/is", '_replace_tag', $html);
-	// form  
+	// form
 	$html = preg_replace_callback("/(<(form)\s+[^>]*?action\s*=\s*(\"|'))([^>]*?)(\\3[^>]*?>)/is", '_replace_tag', $html);
 	$html = preg_replace_callback("/(<(form)\s+[^>]*?action\s*=\s*([^\"']))([\d\w\.\/\+\%-:=&_]+?)(\s*[^>]*?>)/is", '_replace_tag', $html);
 	// href
 	$html = preg_replace_callback("/(<a\s+[^>]*?href\s*=\s*(\"|'))([^>]*?)(\\2[^>]*?>)(.*?)(<\/a\s*>)/is", '_replace_enclosed_tag_traced', $html);
 	$html = preg_replace_callback("/(<a\s+[^>]*?href\s*=\s*())([\d\w\.\/\+\%-:=&_]+)(\s*[^>]*?>)(.*?)(<\/a\s*>)/is", '_replace_enclosed_tag_traced', $html);
-                     
+
 	// title
     if (stristr($uri['host'], 'imdb'))
     {
@@ -318,30 +315,30 @@ function fixup_HTML($html)
 
         // imdb form does not accept utf8
         $html = preg_replace("/(form\s+.*?)(>)/i", '\\1 accept-charset="ISO-8859-1" \\2', $html );
-    }  
- 
+    }
+
     return $html;
 }
 
 function request($urlonly=false)
 {
 	global $urlid, $url;
-	
+
 	// get or post?
 	$pass = ($_POST) ? $_POST : $_GET;
 
-	// don't use $_REQUEST or cookies will screw up the query	
-	foreach ($pass as $key => $value) 
+	// don't use $_REQUEST or cookies will screw up the query
+	foreach ($pass as $key => $value)
     {
-		switch ($key) 
+		switch ($key)
         {
 			case $urlid:
 				$url = html_entity_decode(urldecode($value));
-				break;				
+				break;
 			case session_name():
 			case 'videodbreload':
 			case 'iframe':
-				break;				
+				break;
 			default:
 				if ($request) $request .= "&";
 				$request .= "$key=$value";
@@ -375,7 +372,7 @@ function request($urlonly=false)
 
     // encode possible spaces, use %20 instead of +
 	$url = preg_replace('/ /','%20', $url);
-        
+
     $response = httpClient($url, $_GET['videodbreload'] != 'Y', array('post' => $post));
 
 	// url after redirect
@@ -397,7 +394,7 @@ function request($urlonly=false)
 function fixup_javascript($html)
 {
     global $uri;
-    
+
     if (stristr($uri['host'], 'imdb') === false)
     {
         return $html;
@@ -406,7 +403,9 @@ function fixup_javascript($html)
     preg_match_all('#https:\/\/m.media-amazon.com\/images\/G\/01\/imdb\/js\/collections\/(.*?)-(.*?)js#',
                    $html,
                    $matches_all);
-//    echo "<br> test for switch - "; var_dump($matches_all); var_dump($matches_all[1]);
+//    echo "<br> test for switch - ";
+//    var_dump($matches_all);  
+//    var_dump($matches_all[1]);
     $x = 0;
     foreach ($matches_all[1] as $js_page_type)
     {
@@ -431,6 +430,8 @@ function replace_javascript ($html, $js_page_type, $js_file_name)
     global $iframe;
     
     // allow for iframe templates
+    $is_iframe = '';
+    if ($iframe) $is_iframe = '&iframe=2';
     if ($iframe) $iframe_val = "&iframe=".$iframe;
     
     // get cache folder
@@ -475,7 +476,10 @@ function replace_javascript ($html, $js_page_type, $js_file_name)
     // https://m.media-amazon.com/images/G/01/imdb/js/collections/pagelayout-217123936._CB476660927_.js 
     $pattern  = '#https:\/\/m.media-amazon.com\/images\/G\/01\/imdb\/js\/collections\/'.$js_page_type.'-(.*?)js#';
 //  echo "<BR> - pattern-".$pattern;
-    $html = preg_replace($pattern,$file_path,$html);
+    if (preg_match($pattern, $html, $matches))
+    {        
+        $html = preg_replace($pattern,$file_path,$html);
+    }    
 
     return $html;
 }
@@ -532,4 +536,4 @@ $smarty->assign('fetchtime', $fetchtime);
 // display templates
 tpl_display('trace.tpl');
 
-?>
+

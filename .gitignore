@@ -4,3 +4,5 @@ config.inc.php
 cache
 .ionide
 _old_cvs
+.idea
+
