@@ -25,7 +25,6 @@ $button_next    = '&nbsp;&nbsp; Next &nbsp;&nbsp;>>';
 $button_prev    = '<<&nbsp;&nbsp; Previous &nbsp;&nbsp;';
 $button_upgrade = 'Upgrade';
 
-
 // extract request parameters and disable warnings
 extract($_REQUEST, EXTR_OVERWRITE);
 
@@ -43,6 +42,14 @@ if (isset($formPrevious))
 {
     $step -= 2;
 }
+
+// check for 'missing' pdf.inc and xls.inc so we don't get hard 500 errors
+$TEST = file_get_contents(CONFIG_FILE);
+$PDF_INC_IN_CONFIG = (strpos($TEST, 'pdf.inc.php') !== false);
+$XLS_INC_IN_CONFIG = (strpos($test, 'xls.inc.php') !== false);
+unset($TEST);
+if (!file_exists('pdf.inc.php') && $PDF_INC_IN_CONFIG) file_put_contents('pdf.inc.php', '<?php ');
+if (!file_exists('xls.inc.php') && $XLS_INC_IN_CONFIG) file_put_contents('xls.inc.php', '<?php ');
 
 // upgrading?
 elseif (isset($action) && stristr($action, 'upgrade'))
@@ -165,7 +172,7 @@ switch ($step)
                     {
 						error("Can't create database: ".mysqli_error($dbh));
 						$step--;
-						continue;
+						break;
 					}
                     else
                     {
@@ -174,7 +181,7 @@ switch ($step)
                         {
 							error("Can't select database: ".mysqli_error($dbh));
 							$step--;
-							continue;
+							break;
 						}
 					}
 				}
@@ -465,6 +472,22 @@ switch ($step)
 ?>
                 <tr><td colspan="2">
 <?php
+                    if ($PDF_INC_IN_CONFIG || $XLS_INC_IN_CONFIG) {
+?>
+                        <h2 style="color:red; font-weight:bold;">Your config.inc is in the old format!</h2>
+                        <p>Since version 4.2 the pdf and xls settings have been merged into config.inc itself, even if you're not using them.</p>
+                        <p>If you haven't already, please do the following before continuing:</p>
+                        <ul>
+                        <li>rename your current config.inc.php to config.old.php</li>
+                        <li><b>copy</b> the file config.sample.php to config.inc.php (do <em>not</em> rename the file, it is needed)</li>
+                        <li>open both files in a text-editor of choice (notepad, vi, vs-code, etc)</li>
+                        <li>copy all settings that have been changed from config.old.php to config.inc.php</li>
+                        <li>reload this page to see if there are any errors</li>
+                        <li>resume this installer until you're back into videoDB and have seen that everything still works</li>
+                        <li>after verifying that everything still works you may safely delete the config.<b>old</b>.php, pdf.inc.php and xls.inc.php files</li>
+                        </ul>
+<?php
+                    }
                     if ($upgrading)
                     {
                         // skip the database creation step
@@ -515,7 +538,7 @@ switch ($step)
 ?>				<tr><td colspan="2">
 					<br/>This is the installer for <span style="font-weight:bold;"><a style="color:#333399" href="https://github.com/andig/videodb.git">videoDB</a></span>. You will require:
 					<ol>
-						<li><b>PHP &gt;= 5.5.0</b> with GD library and session support configured.</li><br/><br/>
+						<li><b>PHP &gt;= 7.4.0</b> with GD library and session support configured.</li><br/><br/>
 						<li>A <b>MySQL database</b>, login (username and password) with create/drop table rights.</li><br/><br/>
 						<li>If you want this installer to create the config file for you, it needs permission to write to web server's the videoDB <b>root directory</b>.</li><br/><br/>
 					</ol>

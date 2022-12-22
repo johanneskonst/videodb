@@ -1,6 +1,6 @@
 INSTALL
 
-  - Be sure to have a recent PHP version! At least 5.3 with GD library is required
+  - Be sure to have a recent PHP version! At least 7.4 with GD library is required
   - copy all files in a directory somewhere below your webserver root
   
   Do one of these steps:
