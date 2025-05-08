@@ -75,8 +75,15 @@ $smarty->loadFilter('output', 'trimwhitespace');        // remove whitespace fro
 #$smarty->setCaching(Smarty::CACHING_LIFETIME_SAVED);
 #$smarty->force_compile  = true;
 #$smarty->debugging      = true;
-$smarty->error_reporting = E_ERROR;//E_ALL & ~E_NOTICE;           // added for Smarty 3
-
+if ($config['debug'])
+{
+    $smarty->error_reporting = E_ALL & ~E_NOTICE;           // added for Smarty 3
+    $smarty->force_compile  = true;
+}
+else
+{
+    $smarty->error_reporting = E_ERROR;           // added for Smarty 3    
+}
 // load config
 load_config();
 
@@ -148,8 +155,10 @@ function load_config($force_reload = false)
 {
 	global $config, $lang, $smarty;
     // configuration cached and not outdated?
-    if (!$force_reload && !$config['recompile'] && session_get('config') &&
-       (session_get('config_userid') === $_COOKIE['VDBuserid']) &&
+    if (array_key_exists('recompile',$config)){$recompile = $config['recompile'];} else {$recompile = 0;}
+    if (array_key_exists('VDBuserid',$_COOKIE)){$vdbuserid = $_COOKIE['VDBuserid'];} else {$vdbuserid = null;}
+    if (!$force_reload && !$recompile && session_get('config') &&
+       (session_get('config_userid') === $vdbuserid) &&
        (session_get('config_timestamp') == filemtime(CONFIG_FILE)))
     {
         // load from cache
@@ -178,7 +187,7 @@ function load_config($force_reload = false)
 
         // get user config options from the database
         // does not use get_current_user_id() to allow fallback to login page after loading config
-        if (is_numeric($user_id = $_COOKIE['VDBuserid']))
+        if (array_key_exists('VDBuserid',$_COOKIE) && is_numeric($user_id = $_COOKIE['VDBuserid']))
         {
             // store user id in session to identify reload point for config
             session_set('config_userid', $user_id);
@@ -307,35 +316,67 @@ function load_config($force_reload = false)
  * @param string $title   The pages headline
  * @param string $body    An additional message
  */
-function errorpage($title = 'An error occured', $body = '', $stacktrace = false)
+function errorpage($title = 'An error occurred', $body = '', $stacktrace = false)
 {
-    global $lang,  $save_data_if_error_getting_image, $config;
+    global $lang,  $savedata_for_errorpage, $config;
     
     if ( $config['debug'] )
     {    
-        // this captures the message from img.php if guzzle signals error exception,
-        // as img.php is called from browser which has already displayed data this message 
-        // is lost. writing to debug log file
-        // this is a cause of broken actor images appearing
-        if ($save_data_if_error_getting_image)
+        // this contains the message from img.php and google.php
+        // when guzzle signals error exception initiated from browser which has already displayed data
+        // the message is lost. 
+        // writing to debug log file
+        if ($savedata_for_errorpage)
         {
-            $line = strtok($body, "\n");
+            $line = strtok($body, "\n");  //get first line of exception
             $current_time = date("Y-m-d")." T".date("H-i-s");
-            $var = $current_time." - ".$save_data_if_error_getting_image." - ".$line;
-            dlog($var);
-        //    file_put_contents($file_path, $current_time." - ".$save_data_if_error_getting_image." - ".$line."\n", FILE_APPEND);
-            unset($save_data_if_error_getting_image);
+            dlog(" ");
+            dlog("***");
+            dlog($current_time." - ".$title);
+            dlog($current_time." - ".$savedata_for_errorpage." - ".$line);
+            dlog("***");
+            unset($savedata_for_errorpage);
         }
     }
     
     $encoding   = ($lang['encoding']) ? $lang['encoding'] : 'iso-8859-1';
 
     // stacktrace desired and available?
-    if ($stacktrace && function_exists('xdebug_get_function_stack'))
+    if ($stacktrace)
     {
-        $body .= '<br/>'.dump(xdebug_get_function_stack(), true);
-    }
-
+        if (function_exists('xdebug_get_function_stack'))
+        {
+            $body .= '<br/>'.dump(xdebug_get_function_stack(), true);
+        }
+        elseif (function_exists('debug_backtrace'))  // php funtion
+          {
+            $details = debug_backtrace();
+            $body .= '<br><br>***Stack Traceback - Raw***<br>';
+            $body .= var_export($details, True);
+            $body .= '<br><br>***End Stack Traceback - Raw***<br>';
+            
+            $body .= '<br><br>***Stack Traceback - Formated***<br>';
+            foreach($details AS $detail) 
+            {
+                foreach($detail AS $key => $var) 
+                {
+                  if($key == 'args') 
+                  {
+                    foreach($var AS $key_arg => $var_arg) 
+                    {
+                      $body .= $key_arg.': '.$var_arg.'<br>';
+                    }
+                  } 
+                  else 
+                  {
+                    $body .=  $key.': '.$var.'<br>';
+                  }  
+                }
+            }
+            $body .= '<br>***End Stack Traceback - Formated***<br>';
+        }
+    }    
+    
     echo '<?xml version="1.0" encoding="en"?>';
     echo "
     <html xmlns='http:// www.w3.org/1999/xhtml' xml:lang='en' lang='en' dir='ltr'>
@@ -419,7 +460,7 @@ function get_actor_image_from_cache($result, $name, $actorid)
     if ($actorid) $imgurl .= '&actorid='.urlencode($actorid);
 
     // really an image?
-    if (preg_match('/\.(jpe?g|gif|png)$/i', $result['imgurl'], $matches))
+    if (isset($result['imgurl']) && preg_match('/\.(jpe?g|gif|png)$/i', $result['imgurl'], $matches))
     {
         if (cache_file_exists($result['imgurl'], $cache_file, CACHE_IMG, $matches[1]))
         {
@@ -450,14 +491,22 @@ function getActorThumbnail($name, $actorid = 0, $idSearchAllowed = true)
               FROM '.TBL_ACTORS;
 
 	// identify actor by unique actor id, of by name
+    $result = null;
     if ($actorid && $idSearchAllowed) {
         $result = runSQL($SQL." WHERE actorid='".escapeSQL($actorid)."'");
-	}
-	if (!$actorid || (count($result) == 0)) {
+    }
+    if (!$actorid || ((is_array($result) && count($result) == 0)) ) {
         $result = runSQL($SQL." WHERE name='".escapeSQL(html_entity_decode($name))."'");
-	}
-
-    $imgurl = get_actor_image_from_cache($result[0], $name, $actorid);
+    }
+    
+    if (!is_null($result))
+    {
+        $imgurl = get_actor_image_from_cache($result[0], $name, $actorid);
+    }
+    else
+    {
+        $imgurl = get_actor_image_from_cache(null, $name, $actorid);
+    }
 
 	return($imgurl);
 }
@@ -528,7 +577,7 @@ function login_as($userid, $permanent = false)
     $CookieCode = get_user_hash($userid); 
     if(!$CookieCode) $CookieCode = rand(100000000, 999999999);
     // permanent cookie: 1 year, otherwise session only
-    $validtime  = ($permanent) ? time() + 60*60*24*365 : null;
+    $validtime  = ($permanent) ? time() + 60*60*24*365 : 0;
     $username   = get_username($userid);
 
     // get script folder for cookie path
@@ -581,16 +630,16 @@ function auth_check($redirect = true)
     }
 
     // auth check only in multiuser mode
-    if ($config['multiuser'] && ($_COOKIE['VDBuserid'] !== $config['guestid']))
+    if ($config['multiuser'] && ( array_key_exists('VDBuserid',$_COOKIE) && ($_COOKIE['VDBuserid'] !== $config['guestid'])  ))
     {
         $result = false;
 
         $referer = substr($_SERVER['PHP_SELF'], strrpos($_SERVER['PHP_SELF'],'/')+1) .'?'. $_SERVER['QUERY_STRING'];
 
         // already logged in?
-        $userid = $_COOKIE['VDBuserid'];
-        $user   = $_COOKIE['VDBusername'];
-        $pass   = $_COOKIE['VDBpassword'];
+        if (array_key_exists('VDBuserid',$_COOKIE)){$userid = $_COOKIE['VDBuserid'];} else {$userid = 0;}
+        if (array_key_exists('VDBusername',$_COOKIE)){$user   = $_COOKIE['VDBusername'];} else {$user = '';}
+        if (array_key_exists('VDBpassword',$_COOKIE)){$pass   = $_COOKIE['VDBpassword'];}
 
         // auth cookies present?
         if (preg_match('/[a-z]+/i', $user) && preg_match('/[0-9]+/', $pass) && is_numeric($userid))
@@ -709,7 +758,7 @@ function check_permission($permission, $destUserId = null)
     if (!($userid = get_current_user_id())) return false;
 
     // check if permissions cache is initialized
-    if (!is_array($_SESSION['vdb']['permissions']))
+    if (!array_key_exists('permissions',$_SESSION['vdb']) || !is_array($_SESSION['vdb']['permissions']))
     {
         $_SESSION['vdb']['permissions'] = array();
         $_SESSION['vdb']['permissions']['to_uid'] = array();
@@ -734,7 +783,10 @@ function check_permission($permission, $destUserId = null)
     // Cross-user permissions for target user
     if ($destUserId && $destUserId !== PERM_ALL)
     {        
-        $permissions |= $_SESSION['vdb']['permissions']['to_uid'][$destUserId];
+        if (array_key_exists($destUserId, $_SESSION['vdb']['permissions']['to_uid']))
+        {
+            $permissions |= $_SESSION['vdb']['permissions']['to_uid'][$destUserId];
+        }
  
         // checking for _any_ cross-user permission? e.g. used for availability of "New", "Search"
         if (($destUserId == PERM_ANY) && ($permissions & $permission) == 0)
@@ -804,7 +856,11 @@ function get_owner_id($id, $diskid = false)
     $SELECT .= ($diskid) ? "diskid = '$id'" : "id = $id";
 
     $result = runSQL($SELECT);
-    return $result[0]['owner_id'];
+    if (isset($result[0]['owner_id']))
+    {
+        return $result[0]['owner_id'];
+    }
+    return;
 }
 
 /**
@@ -936,7 +992,7 @@ function set_userseen($id, $seen)
 function get_current_user_id()
 {
     // make sure userid is numeric- preventing SQL injection attacs
-    if (!is_numeric($userid = $_COOKIE['VDBuserid'])) $userid = 0;
+    if (array_key_exists('VDBuserid',$_COOKIE) && !is_numeric($userid = $_COOKIE['VDBuserid'])) $userid = 0;
 #    errorpage('Security Error', 'Invalid user id in cookie: '.$userid, true);
     return $userid;
 }

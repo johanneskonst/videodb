@@ -102,17 +102,24 @@ function cache_prune_folders($cache_folder, $cache_max_age, $force_prune = false
 
     // descent hierarchy
     if ($levels > 0)
+    {
+        if (!isset($error))
+        {
+            $error = '';
+        }
         for ($i=0; $i<16; $i++)
             $error .= cache_prune_folders($cache_folder.dechex($i).'/', $cache_max_age, $force_prune, $simulate, $pattern, $levels-1);
+    }        
 }
-
-/**
+       
+ /**
  * Create cache folders
  *
  * Check individual cache folder for existance, check if folder is writable and create folder if it doesn't exist
  */
 function cache_create_folders($dir, $levels = 0)
 {
+    $error = '';
     if (!is_dir($dir))
     {
         if (!@mkdir($dir, 0700)) $error = 'Directory <code>'.$dir.'</code> does not exist.<br/>';

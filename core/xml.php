@@ -27,9 +27,10 @@ function xmlexport($WHERE)
     $result = exportData($WHERE);
     
     // do adultcheck
+    // this may not be needed as same check is done in exportData in previous statement
     if (is_array($result))
     {
-        $result = array_filter($result, create_function('$video', 'return adultcheck($video["id"]);'));
+        $result = array_filter($result, function($video) {return adultcheck($video["id"]);});
     }
     
     $xml = '';
@@ -44,7 +45,7 @@ function xmlexport($WHERE)
         {
             if (!empty($value))
             {
-                if (($key != 'owner_id') && ($key != 'actors'))
+                if (($key != 'owner_id') && ($key != 'actors') && ($key != 'genres'))
                 {
                     $tag       = strtolower($key);
                     $xml_item .= createTag($tag, trim(html_entity_decode_all($value)));
@@ -61,10 +62,10 @@ function xmlexport($WHERE)
         }
         
         // genres
-        if (count($row['genres']))
+        if (count($item['genres']))
         {
             $xml_genres = '';
-            foreach ($row['genres'] as $genre)
+            foreach ($item['genres'] as $genre)
             {
                 $xml_genres .= createTag('genre', $genre['name']);
             }
@@ -80,9 +81,30 @@ function xmlexport($WHERE)
             {
                 $xml_actor_data = '';
                 $actor_data = explode("::",$actor);
-                $xml_actor_data .= createTag('name', $actor_data[0]);
-                $xml_actor_data .= createTag('role', $actor_data[1]);
-                $xml_actor_data .= createTag('imdbid', $actor_data[2]);
+                if (array_key_exists('1', $actor_data))
+                {
+                    $xml_actor_data .= createTag('name', $actor_data[0]);
+                }
+                else
+                {
+                    $xml_actor_data .= createTag('name', '');
+                }
+                if (array_key_exists('1', $actor_data))
+                {
+                    $xml_actor_data .= createTag('role', $actor_data[1]);
+                }
+                else
+                {
+                    $xml_actor_data .= createTag('role', '');
+                }          
+                if (array_key_exists('2', $actor_data))
+                {
+                    $xml_actor_data .= createTag('imdbid', $actor_data[2]);
+                }
+                else
+                {
+                    $xml_actor_data .= createTag('imdbid', '');
+                } 
                 $xml_actors .= createContainer('actor', $xml_actor_data);
             }
             $xml_item .= createContainer('actors', $xml_actors);

@@ -234,10 +234,18 @@ function imdbData($imdbID)
 
     // fetch mainpage
     $resp = httpClient($imdbServer.'/title/tt'.$imdbID.'/', $cache);     // added trailing / to avoid redirect
-    //testing code save resp data from imdb
-    //$file_path = './cache/httpclient-php_imdbData.html';
-    //file_put_contents($file_path, $resp['data']);
+    #testing code save resp data from imdb
+    #file_put_contents('./cache/httpclient-php_imdbData_title.html', $resp['data']);  // write page data to file
+    
     if (!$resp['success']) $CLIENTERROR .= $resp['error']."\n";
+
+    // extract json data from page
+    if (preg_match('#(\<script id\="__NEXT_DATA__".*?\>)(.*?)(\</script\>)#',$resp['data'],$matches))
+    {
+        #file_put_contents('./cache/nextdata.json', $matches[2]);  // write json data to file
+        $json_data = json_decode($matches[2],true);
+        #file_put_contents('./cache/nextdata-decoded.json', print_r($json_data, true));  // write formated json data to file
+    } 
 
     // add encoding
     $data['encoding'] = $resp['encoding'];
@@ -291,11 +299,14 @@ function imdbData($imdbID)
     $data['coverurl'] = imdbGetCoverURL($resp['data']);
 
     // MPAA Rating
-    preg_match('/<div class="subtext">(.+?)</is', $resp['data'], $ary);
-    $data['mpaa'] = trim($ary[1]);
+    $data['mpaa'] = "";
+    $data['mpaa'] = $json_data["props"]["pageProps"]["aboveTheFoldData"]["certificate"]["rating"];
 
     // Runtime
-    if (preg_match('/<li role="presentation" class="ipc-inline-list__item">(\d+)(?:<!-- --> ?)+(?:h|s).*?(?:(?:<!-- --> ?)+(\d+)(?:<!-- --> ?)+.+?)?<\/li>/si', $resp['data'], $ary)) {
+    if (filter_var($json_data["props"]["pageProps"]["aboveTheFoldData"]["runtime"]["seconds"], FILTER_SANITIZE_NUMBER_INT) > 0) {
+        # use the runtime from the next_data json data
+        $data['runtime'] = filter_var($json_data["props"]["pageProps"]["aboveTheFoldData"]["runtime"]["seconds"], FILTER_SANITIZE_NUMBER_INT) / 60;
+    } else if (preg_match('/<li role="presentation" class="ipc-inline-list__item">(\d+)(?:<!-- --> ?)+(?:h|s).*?(?:(?:<!-- --> ?)+(\d+)(?:<!-- --> ?)+.+?)?<\/li>/si', $resp['data'], $ary)) {
         # handles Hours and maybe minutes. Some movies are exactly 1 hours.
         $minutes = intval($ary[2]);
     	if (is_numeric($ary[1])) {
@@ -313,11 +324,17 @@ function imdbData($imdbID)
     }
 
     // Director
-    preg_match('/<li.+?<button.+?Director.+?(<li.+?<a.+?href="\/name\/nm.+?\/?ref_=tt_ov_dr".+?<\/a>.+?<\/ul>)<\/div><\/li>/si', $resp['data'], $ary);
-    preg_match_all('/<a class=.+? href="\/name\/nm.+?">(.+?)<\/a>/si', $ary[1], $ary, PREG_PATTERN_ORDER);
+    $data['director'] = "";
     // TODO: Update templates to use multiple directors
-    $data['director']  = trim(join(', ', $ary[1]));
-
+    if ($json_data["props"]["pageProps"]["mainColumnData"]["directors"]["0"]["totalCredits"] > 0)
+    {
+        foreach ($json_data["props"]["pageProps"]["mainColumnData"]["directors"]["0"]["credits"] as $directordata)
+        {
+            $directorarray[] = trim($directordata["name"]["nameText"]["text"]);
+        }
+        $data['director'] = trim(join(', ',$directorarray));
+    } 
+    
     // Rating
     preg_match('/<div data-testid="hero-rating-bar__aggregate-rating__score" class="sc-.+?"><span class="sc-.+?">(.+?)<\/span><span>\/<!-- -->10<\/span><\/div>/si', $resp['data'], $ary);
     $data['rating'] = trim($ary[1]);
@@ -378,9 +395,11 @@ function imdbData($imdbID)
     }
 
     // Plot
-    preg_match('/<h2>Storyline<\/h2>.*?<p>(.*?)</si', $resp['data'], $ary);
-    $data['plot'] = $ary[1];
-
+    if (array_key_exists('plainText', $json_data["props"]["pageProps"]["aboveTheFoldData"]["plot"]["plotText"]) )
+    {
+        $data['plot'] = stripslashes($json_data["props"]["pageProps"]["aboveTheFoldData"]["plot"]["plotText"]["plainText"]);
+    }
+    
     // Fetch credits
     $resp = imdbFixEncoding($data, httpClient($imdbServer.'/title/tt'.$imdbID.'/fullcredits', $cache));
     if (!$resp['success']) $CLIENTERROR .= $resp['error']."\n";

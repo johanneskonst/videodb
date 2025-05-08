@@ -157,6 +157,7 @@ function tpl_header($help = '', $title = '')
 		switch ($tab)
         {
 			case 'show':
+                                $header['request_uri'] = $_SERVER['REQUEST_URI'];
 			case 'edit':
 				if (!empty($id)) $header['active'] = $tab;
 				// uncomment this if you want the 'Browse' tab to remember last visited movie
@@ -180,7 +181,14 @@ function tpl_header($help = '', $title = '')
     $breadcrumbs = session_get('breadcrumbs', array());
 	$smarty->assign('breadcrumbs', $breadcrumbs);
 
-    $smarty->assign('title',	htmlspecialchars($title));
+    if (!is_null($title))
+    {
+        $smarty->assign('title', htmlspecialchars($title));   
+    }
+    else
+    { 
+        $smarty->assign('title', "");
+    }
     $smarty->assign('header',	$header);
     $smarty->assign('style',	$config['style']);
     $smarty->assign('langcode', $config['language']);
@@ -226,7 +234,7 @@ function tpl_filters($filter, $showtv)
 	// Sorting is disabled when ordering by diskid is enabled
 	if(!$config['orderallbydisk']) {
 		$smarty->assign('order_options', array(-1 => $lang['title'], 1 => $lang['rating'], 2 => $lang['date']));
-		if(!$order) $order = session_get('order');
+		if(!isset($order)) $order = session_get('order');
 		$smarty->assign('order',  $order);
 	} 
 
@@ -359,17 +367,25 @@ function get_actor_thumbnails_batched(&$actors)
     $result = runSQL($SQL);
 
     $result = array_associate($result, 'actorid');
-
+   
     // loop over actors from full-text field
     foreach ($actors as $idx => $actor)
-    {
+    {  
         // check for actor thumbnail
-        $batch_result = $result[$actor['id']];
-        
+        $batch_result = null;
+        if (array_key_exists($actor['id'], $result))
+        {
+            $batch_result = $result[$actor['id']];
+        }
+
         if ($batch_result)
+        {
             $actors[$idx]['imgurl'] = get_actor_image_from_cache($batch_result, $actor['name'], $actor['id']);
+        }
         else
+        {
             $actors[$idx]['imgurl'] = getActorThumbnail($actor['name'], $actor['id'], false);
+        }
     }
 }
 
@@ -474,7 +490,7 @@ function tpl_show($video)
     }
 
     // add episodes information
-    if (is_array($video['episodes']))
+    if (array_key_exists('episodes', $video) && is_array($video['episodes']))
     {
         // allow multiple columns
         $smarty->assign('listcolumns', session_get('listcolumns'));
@@ -506,11 +522,11 @@ function tpl_edit($video)
 	global $smarty, $config, $lang;
 
 	// create a form ready quoted version for each value
-	foreach (array_keys($video) as $key)
+    foreach (array_keys($video) as $key)
     {
-		$video['q_'.$key] = formvar($video[$key]);
-	}
-
+        $video['q_'.$key] = formvar($video[$key]);
+    }           
+            
 	// use custom function for language
 	$video['f_language']  = custom_language_input('language', $video['language']);
 
@@ -518,16 +534,23 @@ function tpl_edit($video)
     $smarty->assign('mediatypes', out_mediatypes());
     if (!isset($video['mediatype'])) $video['mediatype'] = $config['mediadefault'];
 
-	// prepare the custom fields
-	customfields($video, 'in');
+    // prepare the custom fields
+    customfields($video, 'in');
 
     if ($config['multiuser'])
     {
         $smarty->assign('owners', out_owners(array('0' => ''), (check_permission(PERM_ADMIN)) ? false : PERM_WRITE, true));
     }
 
-	// item genres
+    // item genres
+    if (array_key_exists('id', $video))
+    {
 	$item_genres = getItemGenres($video['id']);
+    }
+    else
+    {
+        $item_genres = array();
+    }
 	// new-style
     $smarty->assign('genres', out_genres2($item_genres));
 #dlog(out_genres2($item_genres));
@@ -539,7 +562,7 @@ function tpl_edit($video)
 	$smarty->assign('video', $video);
 
 	// get drilldown url for visit link
-	if ($video['imdbID'])
+	if (array_key_exists('imdbID', $video))
     {
         require_once './engines/engines.php';
         $engine = engineGetEngine($video['imdbID']);	
