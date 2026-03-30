@@ -296,7 +296,7 @@ function imdbData($imdbID)
     $data['origtitle'] = trim($ary[1]);
 
     // Cover URL
-    $data['coverurl'] = imdbGetCoverURL($resp['data']);
+    $data['coverurl'] = imdbGetCoverURL($resp['data'], $json_data);
 
     // MPAA Rating
     $data['mpaa'] = "";
@@ -323,18 +323,6 @@ function imdbData($imdbID)
         $data['runtime'] = $ary[1];
     }
 
-    // Director
-    $data['director'] = "";
-    // TODO: Update templates to use multiple directors
-    if ($json_data["props"]["pageProps"]["mainColumnData"]["directors"]["0"]["totalCredits"] > 0)
-    {
-        foreach ($json_data["props"]["pageProps"]["mainColumnData"]["directors"]["0"]["credits"] as $directordata)
-        {
-            $directorarray[] = trim($directordata["name"]["nameText"]["text"]);
-        }
-        $data['director'] = trim(join(', ',$directorarray));
-    } 
-    
     // Rating
     preg_match('/<div data-testid="hero-rating-bar__aggregate-rating__score" class="sc-.+?"><span class="sc-.+?">(.+?)<\/span><span>\/<!-- -->10<\/span><\/div>/si', $resp['data'], $ary);
     $data['rating'] = trim($ary[1]);
@@ -344,9 +332,17 @@ function imdbData($imdbID)
     $data['country'] = trim(join(', ', $ary[1]));
 
     // Languages
-	preg_match_all('/<a class=".+?" href="\/search\/title\?title_type=feature&amp;primary_language=.+?&amp;sort=moviemeter,asc&amp;ref_=tt_dt_ln">(.+?)<\/a>/', $resp['data'], $ary, PREG_PATTERN_ORDER);
-    $data['language'] = trim(strtolower(join(', ', $ary[1])));
-
+    $data['language'] = '';
+    if (isset( $json_data["props"]["pageProps"]["mainColumnData"]["spokenLanguages"]["spokenLanguages"]) &&
+        is_array($json_data["props"]["pageProps"]["mainColumnData"]["spokenLanguages"]["spokenLanguages"])) 
+    {
+        foreach ($json_data["props"]["pageProps"]["mainColumnData"]["spokenLanguages"]["spokenLanguages"] as $languagedata)
+        {
+            $languagearray[] = trim($languagedata["text"]);
+        }
+        $data['language'] = trim(strtolower(join(', ',$languagearray)));
+    }
+    
     // Genres (as Array)
     preg_match_all('/class="ipc-chip__text">(.+?)<\/span><\/a>/si', $resp['data'], $ary, PREG_PATTERN_ORDER);
     foreach($ary[1] as $genre) {
@@ -405,31 +401,64 @@ function imdbData($imdbID)
     if (!$resp['success']) $CLIENTERROR .= $resp['error']."\n";
 
     // Cast
-    if (preg_match('#<table class="cast_list">(.*)#si', $resp['data'], $match))
+    // Directors
+    #testing code save resp data from imdb
+    #file_put_contents('./cache/httpclient-php_imdbData_cast.html', $resp['data']);  // write page data to file    
+
+    // Increase the PCRE backtrack limit for a potentially large regex operation
+    $origBacktrackLimit = ini_get('pcre.backtrack_limit');
+    $newBacktrackLimit  = '10000000';
+    ini_set('pcre.backtrack_limit', $newBacktrackLimit);
+    
+    // extract json data from page
+    if (preg_match('#(\<script id\="__NEXT_DATA__".*?\>)(.*?)(\</script\>)#s',$resp['data'],$matches))
     {
-        // no idea why it does not always work with (.*?)</table
-        // could be some maximum length of .*?
-        // anyways, I'm cutting it here
-        $casthtml = substr($match[1], 0, strpos($match[1], '</table'));
-        $cast = '';
-        if (preg_match_all('#<td class=\"primary_photo\">\s+<a href=\"\/name\/(nm\d+)\/?.*?".+?<a .+?>(.+?)<\/a>.+?<td class="character">(.*?)<\/td>#si', $casthtml, $ary, PREG_PATTERN_ORDER))
+        #file_put_contents('./cache/nextdata.json-cast', $matches[2]);  // write json data to file
+        $json_data_cast = json_decode($matches[2],true);
+        #file_put_contents('./cache/nextdata-decoded.json-cast', print_r($json_data_cast, true));  // write formated json data to file
+    }
+    //revert the PCRE limits back to their original values after regex operation,
+    ini_set('pcre.backtrack_limit', $origBacktrackLimit);
+    
+    // cast and directors
+    $data['cast'] = "";
+    $data['director'] = "";
+    $cast_done = false;
+    $directors_done = false;
+
+    if (isset($json_data_cast['props']['pageProps']['contentData']['categories']) &&
+        is_array($json_data_cast['props']['pageProps']['contentData']['categories'])) 
+    {
+        foreach ($json_data_cast['props']['pageProps']['contentData']['categories'] as $category) 
         {
-            for ($i=0; $i < sizeof($ary[0]); $i++)
+            if (!isset($category['name'])) 
             {
-                $actorid    = trim(strip_tags($ary[1][$i]));
-                $actor      = trim(strip_tags($ary[2][$i]));
-                $character  = trim( preg_replace('/\s+/', ' ', strip_tags( preg_replace('/&nbsp;/', ' ', $ary[3][$i]))));
-                $cast  .= "$actor::$character::$imdbIdPrefix$actorid\n";
+                continue;
+            }
+            switch (strtolower($category['name'])) 
+            {
+                case "cast":
+                    $cast = imdbGetCast($category, $imdbID);
+                    $data['cast'] = $cast;
+                    $cast_done = true;
+                    break;
+                case "directors":
+                case "director":
+                    $dirs = imdbGetDirectors($category);
+                    $data['director'] = $dirs;
+                    $directors_done = true;
+                    break;
+                default:
+                    // Other categories can be handled here if needed
+                    break;
+            }
+            if ($cast_done && $directors_done) 
+            {
+                break;
             }
         }
-
-        // remove html entities and replace &nbsp; with simple space
-        $data['cast'] = html_clean_utf8($cast);
-
-        // sometimes appearing in series (e.g. Scrubs)
-        $data['cast'] = preg_replace('#/ ... #', '', $data['cast']);
     }
-
+   
     // Fetch plot
     $resp = $resp = imdbFixEncoding($data, httpClient($imdbServer.'/title/tt'.$imdbID.'/plotsummary', $cache));
     if (!$resp['success']) $CLIENTERROR .= $resp['error']."\n";
@@ -481,15 +510,30 @@ function imdbFixEncoding($data, $resp)
  *
  * @author  Roland Obermayer <robelix@gmail.com>
  * @param   string  $data   IMDB Page data
+ * @param   string  $jsondata IMDB json Data
  * @return  string          Cover Image URL
  */
-function imdbGetCoverURL($data) {
+function imdbGetCoverURL($data, $jsondata = null) {
     global $imdbServer;
     global $CLIENTERROR;
     global $cache;
 
-    // find cover image url
-    if (preg_match('/<a class="ipc-lockup-overlay ipc-focusable" href="(\/title\/tt\d+\/mediaviewer\/\??rm.+?)" aria-label=".*?Poster.*?"><div class="ipc-lockup-overlay__screen"><\/div><\/a>/s', $data, $ary))
+    if ($jsondata !== null) 
+    {
+        $url = '';
+        if (isset($jsondata["props"]["pageProps"]["aboveTheFoldData"]["primaryImage"]))
+        {
+            $url = $jsondata["props"]["pageProps"]["aboveTheFoldData"]["primaryImage"]["url"];
+            // If you want the image to scaled to a certain size you can do this.
+            // UX800 sets the width of the image to 800 with correct aspect ratio with regard to height.
+            // UY800 set the height to 800 with correct aspect ratio with regard to width.
+            // $url= str_replace('.jpg', 'UY800_.jpg', $url);
+        }
+        return $url;
+    }
+
+// find cover image url
+    if (preg_match('/<a class="ipc-lockup-overlay ipc-focusable.*?" href="(\/title\/tt\d+\/mediaviewer\/\??rm.+?)" aria-label=".*?Poster.*?"><div class="ipc-lockup-overlay__screen"><\/div><\/a>/s', $data, $ary))
     {
         // Fetch the image page
         $resp = httpClient($imdbServer.$ary[1], $cache);
@@ -592,3 +636,169 @@ function imdbActor($name, $actorid)
     return $ary;
 }
 
+function imdbGetCast(array $category, string $imdbID)
+{
+    $cast = [];
+    if (isset($category['section']['items']) && is_array($category['section']['items'])) {
+        $pageSize   = $category['pagination']['queryVariables']['first'];
+        $total_cast = $category['section']['total'];
+
+        if ($total_cast > $pageSize) {
+            $cast = imdbCastExtra($imdbID);
+        } else {
+            $cast = imdbCast($category['section']['items']);
+        }
+    }
+    return $cast;
+}
+
+function imdbGetDirectors(array $category)
+{
+    $directors = [];
+    if (isset($category['section']['items']) && is_array($category['section']['items'])) {
+        foreach ($category['section']['items'] as $item) {
+            if (isset($item['rowTitle'])) {
+                $directors[] = $item['rowTitle'];
+            }
+        }
+    }
+    $dirs = implode(', ', $directors);
+    $dirs = substr($dirs, 0, 250);
+
+    return $dirs;
+}
+
+function imdbCast(array $items)
+{
+    global $imdbIdPrefix;
+    
+    // Loop through each item in the items array
+    foreach ($items as $item) 
+    {
+        // Check if the required keys exist.
+        $actorid   = isset($item['id']) ? $item['id'] : "";
+        $actor     = isset($item['rowTitle']) ? $item['rowTitle'] : "";
+        // Build the $character string from characters and attributes
+        if (isset($item['characters']) && is_array($item['characters']) && !empty($item['characters'])) 
+        {
+            // Join all characters if available
+            $character = implode(" / ", $item['characters']);
+            // Append attributes if present
+            if (isset($item['attributes']) && !empty($item['attributes'])) 
+            {
+                $character .= " " . $item['attributes'];
+            }
+        }   
+        elseif (isset($item['attributes']) && !empty($item['attributes'])) 
+            {
+                // Use only attributes if characters are not set or empty
+                $character = $item['attributes'];
+            } 
+            else 
+            {
+                // Default to an empty string if neither field is available
+                $character = "";
+            }
+        // Append episodic credit data if available
+        if (isset($item['episodicCreditData']) && is_array($item['episodicCreditData'])) 
+        {
+            $episodicParts = [];
+            if (isset($item['episodicCreditData']['episodesText']) && !empty($item['episodicCreditData']['episodesText'])) {
+                $episodicParts[] = $item['episodicCreditData']['episodesText'];
+            }
+            if (isset($item['episodicCreditData']['tenureText']) && !empty($item['episodicCreditData']['tenureText'])) {
+                $episodicParts[] = $item['episodicCreditData']['tenureText'];
+            }
+            if (!empty($episodicParts)) {
+                $character .= " " . implode(", ", $episodicParts);
+            }
+        }
+        // Append the current actor's details
+        $cast .= "$actor::$character::$imdbIdPrefix$actorid\n";
+    }
+    
+    return $cast;
+}
+
+function imdbCastExtra($imdbID)
+{
+    global $imdbIdPrefix;
+    global $CLIENTERROR;
+    global $cache;
+
+    $param = ['header' => ['Accept' => 'application/json',
+                           'User-Agent' => 'Mozilla/5.0',
+                           'Content-Type' => 'application/json',
+                          ]
+             ];
+    $after = '';
+    $cast = '';
+    
+    do 
+    {
+        $url = 'https://caching.graphql.imdb.com/?operationName=TitleCreditSubPagePagination&variables={"after":"'.$after.'","category":"cast","const":"tt'.$imdbID.'","first":250,"locale":"en-US","originalTitleText":false,"tconst":"tt'.$imdbID.'"}&extensions={"persistedQuery":{"sha256Hash":"716fbcc1b308c56db263f69e4fd0499d4d99ce1775fb6ca75a75c63e2c86e89c","version":1}}';
+
+        $resp = httpClient($url, $cache, $param);
+        if (!$resp['success']) $CLIENTERROR .= $resp['error']."\n";
+
+        // Cast
+        #testing code save resp data from imdb
+        #file_put_contents('./cache/httpclient-php_imdbData_castextra.html', $resp['data']);  // write page data to file    
+        #file_put_contents('./cache/json-castextra', $resp['data']);  // write json data to file
+        $json_data_castextra = json_decode( $resp['data'],true);
+        #file_put_contents('./cache/jsonDecoded-castextra', print_r($json_data_castextra, true));  // write formated json data to file
+
+        if (isset($json_data_castextra['data']['title']['credits']) &&
+            is_array($json_data_castextra['data']['title']['credits'])) 
+        {
+            $credits = $json_data_castextra['data']['title']['credits'];
+            // Loop through each item in the items array
+            foreach ($credits['edges'] as $edge) 
+            {
+                // Check if the required keys exist.
+                $actorId   = isset($edge['node']['name']['id']) ? $edge['node']['name']['id'] : "";
+                $actor     = isset($edge['node']['name']['nameText']['text']) ? $edge['node']['name']['nameText']['text'] : "";
+                // Build the $character string from characters and attributes
+
+                if (is_array($edge['node']['characters'])) 
+                {
+                    $characterNames = array_map(function ($char) 
+                                                {
+                                                    return $char['name'];
+                                                }, $edge['node']['characters']);
+                    $role = implode(' / ', $characterNames);
+
+                    if ($edge['node']['attributes']) 
+                    {
+                        foreach($edge['node']['attributes'] as $attr) 
+                        {
+                            $role .= " (" . $attr['text'] . ")";
+                        }
+                    }
+                } 
+                else 
+                {
+                    $role = $edge['node']['attributes']['text'];
+                }
+                if ($edge['node']['episodeCredits'] && $edge['node']['episodeCredits']['total'] > 0) 
+                {
+                    $total = $edge['node']['episodeCredits']['total'];
+                    $from = $edge['node']['episodeCredits']['yearRange']['year'];
+                    $to = $edge['node']['episodeCredits']['yearRange']['endYear'];
+
+                    $role .= ", $total episodes, $from";
+                    if ($to) 
+                    {
+                        $role .= "-$to";
+                    }
+                }
+                // Append the current actor's details
+                $cast .= "$actor::$role::$imdbIdPrefix$actorId\n";
+            }
+        }
+    
+        $after = $credits['pageInfo']['endCursor'];
+    } while ($credits['pageInfo']['hasNextPage']);
+    
+    return $cast;
+}
