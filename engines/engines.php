@@ -126,7 +126,7 @@ function engineSearch($find, $engine = 'imdb', $para1 = null, $para2 = null)
     }
 
     // make sure all engines properly return the encoding type
-#    if (empty($result['encoding'])) errorpage('Engine Error', 'Engine does not properly return encoding');
+    #if (empty($result['encoding'])) errorpage('Engine Error', 'Engine does not properly return encoding');
 
     // set default encoding iso-8859-1
     $source_encoding = ($result['encoding']) ? $result['encoding'] : $lang['encoding'];
@@ -162,7 +162,7 @@ function engineGetContentUrl($id, $engine = 'imdb')
     if (!engine_load_engine($engine)) return '';
 
     $func = $engine.'ContentUrl';
-    
+
     $result = '';
     if (function_exists($func))
     {
@@ -209,7 +209,7 @@ function engineGetSearchUrl($find, $engine = 'imdb')
 {
     if (!engine_load_engine($engine)) return '';
     $func = $engine.'SearchUrl';
-    
+
     $result = '';
     if (function_exists($func))
     {
@@ -243,7 +243,7 @@ function engine_setup_meta($engine, $meta)
 function engineMeta()
 {
     $engines = array();
-    
+
     if ($dh = @opendir(__DIR__))
     {
         while (($file = readdir($dh)) !== false)
@@ -294,7 +294,7 @@ function engineGetActorEngine($id)
         elseif (preg_match('/^tv\d+$/', $id)) $engine = 'tvcom';
     }
     if (empty($engine)) $engine = 'imdb';
-    
+
     return $engine;
 }
 
@@ -311,7 +311,7 @@ function engineGetActorUrl($name, $id, $engine = 'imdb')
 {
     if (!engine_load_engine($engine)) return '';
     $func = $engine.'ActorUrl';
-    
+
     $result = '';
     if (function_exists($func))
     {
@@ -356,7 +356,7 @@ function engineActor($name, $id, $engine = 'imdb')
 function engine_get_capability($engine, $searchtype)
 {
     global $config;
-    
+
     // get the meta information
     $engine = $config['engines'][$engine];
 
@@ -383,7 +383,7 @@ function engine_get_capable_engines($searchtype)
     global $config;
 
     if (!$searchtype) $searchtype = 'movie';
-    
+
     $engines = array();
     foreach ($config['engines'] as $engine => $meta)
     {
@@ -437,7 +437,7 @@ function engine_deduplicate_result($data)
 
 /**
  * Load the selected engine without errors
- * 
+ *
  * @param string $engine
  * @return bool
  */

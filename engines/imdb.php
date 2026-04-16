@@ -23,7 +23,6 @@ function imdbMeta()
     return array('name' => 'IMDB', 'stable' => 1);
 }
 
-
 /**
  * Get Url to search IMDB for a movie
  *
@@ -152,6 +151,10 @@ function imdbSearch($title, $aka=null)
     global $CLIENTERROR;
     global $cache;
 
+    if (isset($GLOBALS['config']['imdbapi_replace_imdb']) && $GLOBALS['config']['imdbapi_replace_imdb'] == 'yes') {
+        return imdbapiSearch($title, $aka);
+    }
+
     $url = $imdbServer.'/find?q='.urlencode($title);
     if ($aka) $url .= ';s=tt;site=aka';
 
@@ -227,6 +230,10 @@ function imdbData($imdbID)
     global $imdbIdPrefix;
     global $CLIENTERROR;
     global $cache;
+
+    if (isset($GLOBALS['config']['imdbapi_replace_imdb']) && $GLOBALS['config']['imdbapi_replace_imdb'] == 'yes') {
+        return imdbapiData($imdbID);
+    }
 
     $imdbID = preg_replace('/^'.$imdbIdPrefix.'/', '', $imdbID);
     $data= array(); // result
@@ -532,7 +539,7 @@ function imdbGetCoverURL($data, $jsondata = null) {
         return $url;
     }
 
-// find cover image url
+    // find cover image url
     if (preg_match('/<a class="ipc-lockup-overlay ipc-focusable.*?" href="(\/title\/tt\d+\/mediaviewer\/\??rm.+?)" aria-label=".*?Poster.*?"><div class="ipc-lockup-overlay__screen"><\/div><\/a>/s', $data, $ary))
     {
         // Fetch the image page
@@ -567,7 +574,6 @@ function imdbGetCoverURL($data, $jsondata = null) {
     }
 }
 
-
 /**
  * Get Url to visit IMDB for a specific actor
  *
@@ -599,6 +605,10 @@ function imdbActor($name, $actorid)
 {
     global $imdbServer;
     global $cache;
+
+    if (isset($GLOBALS['config']['imdbapi_replace_imdb']) && $GLOBALS['config']['imdbapi_replace_imdb'] == 'yes') {
+        return imdbapiActor($name, $actorid); // this fails when actorid is empty, imdbapi has no search by name :-/
+    }
 
     // search directly by id or via name?
     $resp = httpClient(imdbActorUrl($name, $actorid), $cache);
@@ -671,9 +681,9 @@ function imdbGetDirectors(array $category)
 function imdbCast(array $items)
 {
     global $imdbIdPrefix;
-    
+
     // Loop through each item in the items array
-    foreach ($items as $item) 
+    foreach ($items as $item)
     {
         // Check if the required keys exist.
         $actorid   = isset($item['id']) ? $item['id'] : "";
